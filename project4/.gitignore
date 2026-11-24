@@ -1,0 +1,12 @@
+venv/
+.venv/
+.env
+.env.*
+__pycache__/
+*.pyc
+security-reports/
+db.sqlite3
+complaint_db.sql
+media/
+
+*.bak
