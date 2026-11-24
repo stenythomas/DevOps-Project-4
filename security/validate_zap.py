@@ -1,7 +1,9 @@
 
 import json
 import sys
-from urllib.parse import urlsplit
+import subprocess
+from pathlib import Path
+from urllib.parse import urlsplit, unquote
 
 REPORT = "security-reports/dast-report.json"
 
@@ -19,12 +21,21 @@ allowed = {
     ("90004", "Cross-Origin-Embedder-Policy Header Missing or Invalid"),
 }
 
-public_css = {
-    "/static/css/animated.css",
-    "/static/css/fontawesome.css",
-    "/static/css/owl.css",
-    "/static/css/templatemo-space-dynamic.css",
-    "/static/fonts/poppins/poppins.css",
+public_extensions = {
+    ".css",
+    ".js",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".webp",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
 }
 
 manual_review = {
@@ -32,6 +43,55 @@ manual_review = {
     ("10055", "CSP: style-src unsafe-inline"),
     ("90004", "Cross-Origin-Embedder-Policy Header Missing or Invalid"),
 }
+
+tracked_files = set(
+    subprocess.check_output(
+        ["git", "ls-files", "-z", "--", "project4/static/"]
+    ).decode("utf-8").split("\0")
+)
+
+static_root = Path("project4/static").resolve()
+
+
+def is_public_static(url, method, risk):
+    parsed = urlsplit(url)
+    path = unquote(parsed.path)
+
+    if (
+        parsed.scheme != "http"
+        or parsed.netloc != "127.0.0.1:8001"
+        or not path.startswith("/static/")
+        or parsed.query
+        or parsed.fragment
+        or method not in {"GET", "HEAD"}
+        or risk != 0
+    ):
+        return False
+
+    relative = path.removeprefix("/static/")
+
+    if (
+        not relative
+        or "\\" in relative
+        or any(
+            part in {"", ".", ".."}
+            or part.startswith(".")
+            for part in relative.split("/")
+        )
+    ):
+        return False
+
+    asset = static_root / relative
+    tracked_path = "project4/static/" + relative
+
+    return (
+        asset.suffix.lower() in public_extensions
+        and tracked_path in tracked_files
+        and asset.is_file()
+        and asset.resolve().is_relative_to(static_root)
+        and not asset.is_symlink()
+    )
+
 
 sites = report.get("site", [])
 
@@ -52,31 +112,31 @@ for site in sites:
             unexpected.append(f"{rule}: {name}")
             continue
 
-        if finding == ("10049", "Storable and Cacheable Content"):
+        if finding == (
+            "10049",
+            "Storable and Cacheable Content"
+        ):
             instances = alert.get("instances", [])
 
             if not instances:
-                unexpected.append("Cacheable content has no URL evidence")
+                unexpected.append(
+                    "Cacheable content has no URL evidence"
+                )
                 continue
 
             for instance in instances:
                 url = instance.get("uri", "")
                 method = instance.get("method", "")
-                parsed = urlsplit(url)
 
-                if (
-                    parsed.scheme != "http"
-                    or parsed.netloc != "127.0.0.1:8001"
-                    or parsed.path not in public_css
-                    or parsed.query
-                    or method != "GET"
-                    or risk != 0
-                ):
+                if is_public_static(url, method, risk):
+                    print(
+                        "APPROVED PUBLIC STATIC:",
+                        urlsplit(url).path
+                    )
+                else:
                     unexpected.append(
                         f"Unapproved cacheable content: {url}"
                     )
-                else:
-                    print(f"APPROVED PUBLIC CSS: {parsed.path}")
 
         elif finding in manual_review:
             review_required.append(f"{rule}: {name}")
@@ -90,7 +150,9 @@ for site in sites:
             )
 
         else:
-            print(f"ACCEPTED INFORMATIONAL: {rule}: {name}")
+            print(
+                f"ACCEPTED INFORMATIONAL: {rule}: {name}"
+            )
 
 if unexpected:
     for finding in unexpected:
