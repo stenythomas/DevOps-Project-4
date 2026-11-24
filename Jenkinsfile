@@ -11,9 +11,6 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'stenythomas/project4-app'
         CI_IMAGE = "project4-app:ci-${BUILD_NUMBER}"
-        CI_DB_PASSWORD = ''
-        CI_ROOT_PASSWORD = ''
-        CI_SECRET_KEY = ''
     }
 
     stages {
@@ -200,7 +197,7 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
+                        credentialsId: 'Dockerhub-credentials',
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_TOKEN'
                     )
