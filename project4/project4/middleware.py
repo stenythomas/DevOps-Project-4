@@ -19,6 +19,10 @@ class SecurityHeadersMiddleware:
             "strict-origin-when-cross-origin"
         )
 
+        response["Cross-Origin-Resource-Policy"] = (
+            "same-origin"
+        )
+
         if "text/html" in response.get("Content-Type", ""):
 
             response["Cache-Control"] = (
@@ -37,14 +41,10 @@ class SecurityHeadersMiddleware:
                 "'sha256-2qNzNpI3gwHqqEBSeKFFc4Nd1Gz75vybmFp1jNGOvmA='; "
 
                 "style-src 'self' 'unsafe-inline' "
-                "https://fonts.googleapis.com "
-                "https://cdn.jsdelivr.net "
                 "https://widget.kommunicate.io "
                 "https://cdn.kommunicate.io; "
 
                 "font-src 'self' data: "
-                "https://fonts.gstatic.com "
-                "https://cdn.jsdelivr.net "
                 "https://widget.kommunicate.io "
                 "https://cdn.kommunicate.io; "
 
@@ -52,7 +52,6 @@ class SecurityHeadersMiddleware:
                 "https://*.kommunicate.io; "
 
                 "connect-src 'self' "
-                "https://cdn.jsdelivr.net "
                 "https://*.kommunicate.io "
                 "wss://*.kommunicate.io; "
 
