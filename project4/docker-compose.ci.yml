@@ -1,0 +1,41 @@
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: complaint_db
+      MYSQL_USER: project4user
+      MYSQL_PASSWORD: ${CI_DB_PASSWORD:?Required}
+      MYSQL_ROOT_PASSWORD: ${CI_ROOT_PASSWORD:?Required}
+
+    volumes:
+      - ci_mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysql -h 127.0.0.1 -u "$$MYSQL_USER" -p"$$MYSQL_PASSWORD" "$$MYSQL_DATABASE" -e "SELECT 1"
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  web:
+    image: ${CI_IMAGE:-project4-app:ci}
+
+    ports:
+      - "127.0.0.1:8001:8000"
+
+    environment:
+      DB_NAME: complaint_db
+      DB_USER: project4user
+      DB_PASSWORD: ${CI_DB_PASSWORD:?Required}
+      DB_HOST: db
+      DB_PORT: "3306"
+      DJANGO_SECRET_KEY: ${CI_SECRET_KEY:?Required}
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  ci_mysql_data:
