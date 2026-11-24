@@ -1,6 +1,7 @@
 services:
   db:
     image: mysql:8.4
+
     environment:
       MYSQL_DATABASE: complaint_db
       MYSQL_USER: project4user
@@ -22,8 +23,8 @@ services:
   web:
     image: ${CI_IMAGE:-project4-app:ci}
 
-    ports:
-      - "127.0.0.1:8001:8000"
+    expose:
+      - "8000"
 
     environment:
       DB_NAME: complaint_db
@@ -32,10 +33,52 @@ services:
       DB_HOST: db
       DB_PORT: "3306"
       DJANGO_SECRET_KEY: ${CI_SECRET_KEY:?Required}
+      DJANGO_DEBUG: "False"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,web,nginx"
+
+    volumes:
+      - ci_static_data:/app/staticfiles
+      - ci_media_data:/app/media
+
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+      exec gunicorn --bind 0.0.0.0:8000
+      --workers 2 --timeout 120
+      --access-logfile -
+      --error-logfile -
+      project4.wsgi:application"
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; socket.create_connection(('127.0.0.1', 8000), 5).close()"
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
 
     depends_on:
       db:
         condition: service_healthy
 
+  nginx:
+    image: nginx:stable-alpine
+
+    ports:
+      - "127.0.0.1:8001:80"
+
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ci_static_data:/app/staticfiles:ro
+      - ci_media_data:/app/media:ro
+
+    depends_on:
+      web:
+        condition: service_healthy
+
 volumes:
   ci_mysql_data:
+  ci_static_data:
+  ci_media_data:

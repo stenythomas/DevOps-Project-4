@@ -93,20 +93,41 @@
       });
   });
 
-  function onScroll(event){
-      var scrollPos = $(document).scrollTop();
-      $('.nav a').each(function () {
-          var currLink = $(this);
-          var refElement = $(currLink.attr("href"));
-          if (refElement.position().top <= scrollPos && refElement.position().top + refElement.height() > scrollPos) {
-              $('.nav ul li a').removeClass("active");
-              currLink.addClass("active");
-          }
-          else{
-              currLink.removeClass("active");
-          }
-      });
-  }
+  function onScroll(event) {
+    var scrollPos = $(document).scrollTop();
+
+    $('.nav a').each(function () {
+        var currLink = $(this);
+        var href = currLink.attr("href");
+
+        if (!href || !href.startsWith("#") || href === "#") {
+            return;
+        }
+
+        var element = document.getElementById(href.substring(1));
+
+        if (!element) {
+            return;
+        }
+
+        var refElement = $(element);
+        var position = refElement.position();
+
+        if (!position) {
+            return;
+        }
+
+        if (
+            position.top <= scrollPos &&
+            position.top + refElement.height() > scrollPos
+        ) {
+            $('.nav ul li a').removeClass("active");
+            currLink.addClass("active");
+        } else {
+            currLink.removeClass("active");
+        }
+    });
+}
 
 
 

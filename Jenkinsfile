@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -30,8 +31,11 @@ pipeline {
                 }
 
                 sh '''
+                    rm -rf security-reports zap-output
                     mkdir -p security-reports
+
                     python3 -m venv .ci-venv
+
                     .ci-venv/bin/pip install --upgrade pip
                     .ci-venv/bin/pip install bandit pip-audit
                 '''
@@ -88,11 +92,17 @@ pipeline {
                         docker compose \
                         -p project4-ci \
                         -f docker-compose.ci.yml \
+                        config --quiet
+
+                        docker compose \
+                        -p project4-ci \
+                        -f docker-compose.ci.yml \
                         up -d --wait
 
                         docker compose \
                         -p project4-ci \
-                        -f docker-compose.ci.yml ps
+                        -f docker-compose.ci.yml \
+                        ps
                     '''
                 }
             }
@@ -135,6 +145,11 @@ pipeline {
                         python manage.py makemigrations \
                         --check --dry-run
 
+                        docker compose \
+                        -p project4-ci \
+                        -f docker-compose.ci.yml \
+                        exec -T nginx nginx -t
+
                         curl --fail --silent --show-error \
                         --retry 10 \
                         --retry-connrefused \
@@ -145,6 +160,64 @@ pipeline {
                         echo "Application smoke test passed"
                     '''
                 }
+            }
+        }
+
+        stage('Static File Testing') {
+            steps {
+                sh '''
+                    for file in \
+                    jquery/jquery.min.js \
+                    bootstrap/js/bootstrap.bundle.min.js \
+                    jquery-ui/jquery-ui.min.js \
+                    images/favicon.svg \
+                    images/baner-dec-left.png \
+                    images/baner-dec-right.png \
+                    js/kommunicate.js
+                    do
+                        curl --fail --silent --show-error \
+                        "http://127.0.0.1:8001/static/$file" \
+                        -o /dev/null
+
+                        echo "PASS: $file"
+                    done
+                '''
+            }
+        }
+
+        stage('Security Header Testing') {
+            steps {
+                sh '''
+                    curl --fail --silent --show-error \
+                    -I http://127.0.0.1:8001/ \
+                    > security-reports/http-headers.txt
+
+                    cat security-reports/http-headers.txt
+
+                    grep -qi '^Content-Security-Policy:' \
+                    security-reports/http-headers.txt
+
+                    grep -qi '^Permissions-Policy:' \
+                    security-reports/http-headers.txt
+
+                    grep -qi '^X-Content-Type-Options: nosniff' \
+                    security-reports/http-headers.txt
+
+                    grep -qi '^X-Frame-Options: DENY' \
+                    security-reports/http-headers.txt
+
+                    grep -qi '^Cache-Control:.*no-store' \
+                    security-reports/http-headers.txt
+
+                    if grep -Ei '^Server:.*(WSGIServer|CPython|gunicorn|nginx/)' \
+                    security-reports/http-headers.txt
+                    then
+                        echo "Unexpected server information disclosure"
+                        exit 1
+                    fi
+
+                    echo "Security header checks passed"
+                '''
             }
         }
 
@@ -164,9 +237,6 @@ pipeline {
                             -t http://127.0.0.1:8001 \
                             -m 1 \
                             -r dast-report.html
-
-                            result=$?
-                            exit "$result"
                         ''',
                         returnStatus: true
                     )
@@ -236,13 +306,20 @@ pipeline {
                 allowEmptyArchive: true
             )
 
-            dir('project4') {
-                sh '''
-                    docker compose \
-                    -p project4-ci \
-                    -f docker-compose.ci.yml \
-                    down -v --remove-orphans || true
-                '''
+            script {
+                if (env.CI_DB_PASSWORD &&
+                    env.CI_ROOT_PASSWORD &&
+                    env.CI_SECRET_KEY) {
+
+                    dir('project4') {
+                        sh '''
+                            docker compose \
+                            -p project4-ci \
+                            -f docker-compose.ci.yml \
+                            down -v --remove-orphans || true
+                        '''
+                    }
+                }
             }
         }
 
