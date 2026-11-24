@@ -1,0 +1,14 @@
+# Generated security reports
+security-reports/
+zap-output/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.ci-venv/
+
+# Environment secrets
+.env
+.env.*
