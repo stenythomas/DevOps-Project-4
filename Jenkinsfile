@@ -277,67 +277,33 @@ pipeline {
                         security-reports/
                     '''
 
-                    if (zapStatus == 2) {
-                        sh '''
-                            python3 - <<'PY'
-import json
+                    if (!(zapStatus in [0, 2])) {
+                        error("ZAP failed with exit code ${zapStatus}")
+                    }
 
-with open("security-reports/dast-report.json") as f:
-    report = json.load(f)
+                    def policyStatus = sh(
+                        script: 'python3 security/validate_zap.py',
+                        returnStatus: true
+                    )
 
-allowed = {
-    ("10049", "Non-Storable Content"),
-    ("10055", "CSP: script-src unsafe-eval"),
-    ("10109", "Modern Web Application"),
-    ("10111", "Authentication Request Identified"),
-    ("10112", "Session Management Response Identified"),
-    ("90004", "Cross-Origin-Embedder-Policy Header Missing or Invalid"),
-}
-
-sites = report.get("site", [])
-if not sites:
-    raise SystemExit("Invalid or empty ZAP report")
-
-unexpected = []
-review_required = []
-
-for site in sites:
-    for alert in site.get("alerts", []):
-        rule = str(alert.get("pluginid", ""))
-        name = alert.get("alert", "")
-        risk = int(alert.get("riskcode", 0))
-
-        if (rule, name) not in allowed or risk > 2:
-            unexpected.append(f"{rule}: {name}")
-        elif rule in {"10055", "90004"}:
-            review_required.append(f"{rule}: {name}")
-
-if unexpected:
-    for finding in unexpected:
-        print("UNAPPROVED:", finding)
-    raise SystemExit("Unexpected security findings detected")
-
-if not review_required:
-    raise SystemExit("ZAP returned warnings without expected review findings")
-
-for finding in sorted(set(review_required)):
-    print("REVIEW REQUIRED:", finding)
-PY
-                        '''
+                    if (policyStatus == 2) {
+                        archiveArtifacts(
+                            artifacts: 'security-reports/dast-report.*'
+                        )
 
                         timeout(time: 15, unit: 'MINUTES') {
                             input(
-                                message: 'Review the archived ZAP findings. Accept the known CSP unsafe-eval and COEP exceptions for this build?',
+                                message: 'Review ZAP reports. Accept CSP unsafe-eval, inline CSS and COEP exceptions?',
                                 ok: 'Approve security exceptions'
                             )
                         }
 
-                        echo 'Known security exceptions approved for this build'
+                        echo 'Known security exceptions approved'
 
-                    } else if (zapStatus != 0) {
-                        error("ZAP failed with exit code ${zapStatus}")
+                    } else if (policyStatus != 0) {
+                        error('Unapproved ZAP security findings detected')
                     } else {
-                        echo 'ZAP security scan passed'
+                        echo 'ZAP security policy validation passed'
                     }
                 }
             }
