@@ -4,6 +4,8 @@ from django.shortcuts import redirect
 from  django.core.files.storage import FileSystemStorage
 from django.conf import settings
 from .models import *
+from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import make_password, check_password
 
 
 def index(request):
@@ -20,47 +22,63 @@ def studreg(request):
         name=request.POST.get('name')
         phone=request.POST.get('phone')
         email=request.POST.get('email')
-        password=request.POST.get('password')
+        password=make_password(request.POST.get('password'))
         registration=complaintboxregister(name=name,phone=phone,email=email,image=image,password=password)
         registration.save()
     return render(request,'studreg.html',{'succes':'registered suucessfully'})
 
 
 def login(request):
-    email = request.POST.get('email')
-    password = request.POST.get('password')
-    if email == 'admin@gmail.com' and password =='admin':
+    if request.method != "POST":
+        return render(request, 'loginform.html')
+
+    email = request.POST.get('email', '')
+    password = request.POST.get('password', '')
+
+    # Administrator authentication
+    admin = authenticate(
+        request,
+        username=email,
+        password=password
+    )
+
+    if admin is not None and admin.is_superuser:
+        request.session.flush()
         request.session['logintdetail'] = email
         request.session['admin'] = 'admin'
         return render(request, 'index.html')
 
-    elif complaintboxregister.objects.filter(email=email,password=password).exists():
-        userdetail=complaintboxregister.objects.get(email=request.POST['email'], password=password)
-        if userdetail.password == request.POST['password']:
-            request.session['uid'] = userdetail.id
-            request.session['uname'] = userdetail.name
+    # Student authentication
+    userdetail = complaintboxregister.objects.filter(
+        email=email
+    ).first()
 
-            request.session['email'] = email
+    if userdetail and check_password(password, userdetail.password):
+        request.session.flush()
+        request.session['uid'] = userdetail.id
+        request.session['uname'] = userdetail.name
+        request.session['email'] = email
+        request.session['user'] = 'user'
 
-            request.session['user'] = 'user'
+        return render(request, 'index.html')
 
-            return render(request,'index.html')
-        
+    # Faculty authentication
+    userdetail = complaintboxfaculty.objects.filter(
+        email=email
+    ).first()
 
-    elif complaintboxfaculty.objects.filter(email=email,password=password).exists():
-        userdetail=complaintboxfaculty.objects.get(email=request.POST['email'], password=password)
-        if userdetail.password == request.POST['password']:
-            request.session['fuid'] = userdetail.id
-            request.session['uname'] = userdetail.name
+    if userdetail and check_password(password, userdetail.password):
+        request.session.flush()
+        request.session['fuid'] = userdetail.id
+        request.session['uname'] = userdetail.name
+        request.session['email'] = email
+        request.session['fuser'] = 'fuser'
 
-            request.session['email'] = email
+        return render(request, 'index.html')
 
-            request.session['fuser'] = 'fuser'
-
-            return render(request,'index.html')
-        
-    else:
-        return render(request, 'loginform.html', {'status': 'Invalid Username or Password'})
+    return render(request, 'loginform.html', {
+        'status': 'Invalid Username or Password'
+    })
     
 
 def logout(request):
@@ -76,7 +94,7 @@ def addfaculty(request):
         designation=request.POST.get('designation')
         name=request.POST.get('name')
         email=request.POST.get('email')
-        password=request.POST.get('password')
+        password=make_password(request.POST.get('password'))
         registration=complaintboxfaculty(name=name,designation=designation,email=email,password=password)
         registration.save()
     return render(request,'addfaculty.html',{'succes':'registered suucessfully'})
@@ -152,7 +170,7 @@ def updates(request,id):
         name=request.POST.get('name')
         phone=request.POST.get('phone')
         email=request.POST.get('email')
-        password=request.POST.get('password')
+        password=make_password(request.POST.get('password'))
         registration=complaintboxregister(name=name,phone=phone,email=email,image=image,password=password,id=id)
         registration.save()
         return redirect(studentpro)
@@ -205,7 +223,7 @@ def facultyupdates(request,id):
         designation=request.POST.get('designation')
         name=request.POST.get('name')
         email=request.POST.get('email')
-        password=request.POST.get('password')
+        password=make_password(request.POST.get('password'))
         registration=complaintboxfaculty(name=name,designation=designation,email=email,password=password,id=id)
         registration.save()
         return redirect(viewfaculty)
